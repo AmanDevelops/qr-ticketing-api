@@ -8,4 +8,4 @@ databaseURL = "https://your-database-name.firebaseio.com"
 default_app = firebase_admin.initialize_app(cred_obj, {"databaseURL": databaseURL})
 
 
-cursor = db.reference("/tickets")
+cursor = db.reference("/tickets/")
