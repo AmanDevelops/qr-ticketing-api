@@ -18,10 +18,7 @@ class VerifyPayments:
                 os.environ.get("RAZORPAY_KEY_SECRET"),
             ),
         )
-        if response.get("status") == "captured":
-            return True
-        else:
-            return False
+        return True if response.get("status") == "captured" else False
 
 
 class Encode:

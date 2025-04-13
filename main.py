@@ -2,17 +2,15 @@ import io
 from datetime import datetime
 
 import qrcode
-from dotenv import load_dotenv
 from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+import config
 import utils
 from database import cursor
 
 app = FastAPI()
-
-load_dotenv()
 
 
 class UserDetails(BaseModel):
@@ -26,9 +24,13 @@ class UserDetails(BaseModel):
 @app.post("/create", response_class=Response)
 def create_qr(user: UserDetails):
 
-    # payment_verify = utils.VerifyPayments.razorpay(user.payment_id)
+    isPaid = (
+        utils.VerifyPayments.razorpay(user.payment_id)
+        if config.PAYMENT_VERIFICATION
+        else True
+    )
 
-    if True:  # Condition to check payment
+    if isPaid:
         payload = {
             "event_id": user.event_id,
             "ticket_id": user.ticket_id,
@@ -37,7 +39,7 @@ def create_qr(user: UserDetails):
             "metadata": user.metadata,
         }
 
-        img = qrcode.make(utils.Encode.jwt_encode(payload, "SECRET_KEY"))
+        img = qrcode.make(utils.Encode.jwt_encode(payload, config.SECRET_KEY))
 
         cursor.child(str(user.ticket_id)).set(payload)
 
