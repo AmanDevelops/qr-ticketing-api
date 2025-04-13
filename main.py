@@ -1,5 +1,5 @@
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 
 import qrcode
 from fastapi import FastAPI, Response
@@ -24,13 +24,13 @@ class UserDetails(BaseModel):
 @app.post("/create", response_class=Response)
 def create_qr(user: UserDetails):
 
-    isPaid = (
+    is_paid = (
         utils.VerifyPayments.razorpay(user.payment_id)
         if config.PAYMENT_VERIFICATION
         else True
     )
 
-    if isPaid:
+    if is_paid:
         payload = {
             "event_id": user.event_id,
             "ticket_id": user.ticket_id,
@@ -51,4 +51,29 @@ def create_qr(user: UserDetails):
 
 @app.get("/verify/{ticket_id}")
 def verify_ticket(ticket_id: str):
-    pass
+    data = cursor.child(ticket_id).get()
+
+    if data is None:
+        return {
+            "error": True,
+            "message": "Invalid Ticket",
+            "code": "INVALID_TICKET",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    if datetime.fromisoformat(data.get("valid_until")).astimezone(
+        timezone.utc
+    ) < datetime.now(timezone.utc):
+        return {
+            "error": True,
+            "message": "Ticket Expired",
+            "code": "TICKET_EXPIRED",
+            "timestamp": datetime.now().isoformat(),
+        }
+    else:
+        return {
+            "status": 200,
+            "message": "Verified",
+            "code": "TICKET_VALIDATED",
+            "timestamp": datetime.now().isoformat(),
+        }
