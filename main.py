@@ -1,9 +1,12 @@
 import io
 from datetime import datetime, timezone
+from typing import Annotated
 
+import jwt
 import qrcode
-from fastapi import FastAPI, Response
+from fastapi import Depends, FastAPI, Response
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 import config
@@ -11,6 +14,7 @@ import utils
 from database import cursor
 
 app = FastAPI()
+security = HTTPBearer()
 
 
 class UserDetails(BaseModel):
@@ -50,8 +54,23 @@ def create_qr(user: UserDetails):
 
 
 @app.get("/verify/{ticket_id}")
-def verify_ticket(ticket_id: str):
+def verify_ticket(
+    ticket_id: str,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+):
+
+    jwt_token = credentials.credentials
+    payload = jwt.decode(jwt_token, config.SECRET_KEY, algorithms=["HS256"])
+
     data = cursor.child(ticket_id).get()
+
+    if data != payload:
+        return {
+            "error": True,
+            "message": "Invalid Ticket",
+            "code": "INVALID_TICKET",
+            "timestamp": datetime.now().isoformat(),
+        }
 
     if data is None:
         return {
