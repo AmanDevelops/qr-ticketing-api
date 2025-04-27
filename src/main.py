@@ -1,40 +1,81 @@
 import io
+import json
 from datetime import datetime, timezone
 from typing import Annotated
 
 import jwt
 import qrcode
 from fastapi import Depends, FastAPI, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-import config
 import utils
-from database import cursor
+import database
 
 app = FastAPI()
 security = HTTPBearer()
 
 
 class UserDetails(BaseModel):
+    first_name: int
     event_id: int
     ticket_id: int
-    payment_id: str
     valid_until: datetime
-    metadata: dict | None = None
 
+class EventDetails(BaseModel):
+    name: str
+    event_time: datetime
+    location: str
+    ticket_capacity: int
+
+
+
+@app.post("/events/create", response_class=Response)
+def create_event(event_detail: EventDetails):
+    """
+    Args:
+        event_detail (EventDetails): The details of the event to be created, including name, event time, location, and ticket capacity.
+
+    Returns:
+        dict: A response indicating success or failure of the event creation.
+    """
+    try:
+        event_id = utils.create_ticket(
+            name=event_detail.name,
+            event_time=event_detail.event_time,
+            location=event_detail.location,
+            ticket_capacity=event_detail.ticket_capacity,
+        )
+        return JSONResponse(
+            content={"success": True, "event_id": event_id},
+            media_type="application/json",
+            status_code=200,
+        )
+    except database.DatabaseConnectionError as db_err:
+        return JSONResponse(
+            content={"error": True, "message": f"Database connection error: {str(db_err)}"},
+            media_type="application/json",
+            status_code=500,
+        )
+    except database.DatabaseTimeoutError as timeout_err:
+        return JSONResponse(
+            content={"error": True, "message": f"Database timeout error: {str(timeout_err)}"},
+            media_type="application/json",
+            status_code=500,
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={"error": True, "message": f"An unexpected error occurred: {str(e)}"},
+            media_type="application/json",
+            status_code=500,
+        )
 
 @app.post("/create", response_class=Response)
 def create_qr(user: UserDetails):
 
-    is_paid = (
-        utils.VerifyPayments.razorpay(user.payment_id)
-        if config.PAYMENT_VERIFICATION
-        else True
-    )
 
-    if is_paid:
+    if True:
         payload = {
             "event_id": user.event_id,
             "ticket_id": user.ticket_id,

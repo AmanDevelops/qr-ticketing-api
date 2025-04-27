@@ -1,26 +1,27 @@
-import os
-
 import jwt
-import requests
+import datetime
+from database import connection
+
+def jwt_encode(payload: dict, secret_key: str):
+    return jwt.encode(payload, secret_key, algorithm="HS256")
 
 
-class VerifyPayments:
-    def razorpay(payment_id: str):
-        """
-        For Reference: https://razorpay.com/docs/api/payments/fetch-with-id
-        """
+def create_ticket(name: str, event_time: datetime.datetime, location: str, ticket_capacity: int) -> None:
+    query = """
+        INSERT INTO events.events (name, event_time, location, ticket_capacity)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id;
+    """
+    values = (name, event_time, location, ticket_capacity)
 
-        uri = f"https://api.razorpay.com/v1/payments/{payment_id}"
-        response = requests.get(
-            uri,
-            auth=(
-                os.environ.get("RAZORPAY_KEY"),
-                os.environ.get("RAZORPAY_KEY_SECRET"),
-            ),
-        )
-        return True if response.get("status") == "captured" else False
+    with connection.cursor() as cursor:
+        cursor.execute(query, values)
 
+        result = cursor.fetchone()
 
-class Encode:
-    def jwt_encode(payload: dict, secret_key: str):
-        return jwt.encode(payload, secret_key, algorithm="HS256")
+        if result:
+            last_inserted_id = result[0]
+
+        connection.commit()
+
+        return last_inserted_id
