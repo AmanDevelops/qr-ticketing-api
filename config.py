@@ -1,3 +1,0 @@
-PAYMENT_VERIFICATION = False  # SET False to skip payment checks
-
-SECRET_KEY = "SUPER_SECRET_PASSWORD"
