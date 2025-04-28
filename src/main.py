@@ -10,18 +10,17 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-import utils
+import utils, config
 import database
 
 app = FastAPI()
 security = HTTPBearer()
 
 
-class UserDetails(BaseModel):
-    first_name: int
+class TicketDetails(BaseModel):
+    user_id: int
     event_id: int
-    ticket_id: int
-    valid_until: datetime
+    metadata: dict
 
 class EventDetails(BaseModel):
     name: str
@@ -41,7 +40,7 @@ def create_event(event_detail: EventDetails):
         dict: A response indicating success or failure of the event creation.
     """
     try:
-        event_id = utils.create_ticket(
+        event_id = utils.create_event(
             name=event_detail.name,
             event_time=event_detail.event_time,
             location=event_detail.location,
@@ -71,69 +70,73 @@ def create_event(event_detail: EventDetails):
             status_code=500,
         )
 
-@app.post("/create", response_class=Response)
-def create_qr(user: UserDetails):
+@app.post("/tickets/create", response_class=Response)
+def create_qr(user: TicketDetails):
 
-
-    if True:
+    try:
+        ticket_id = utils.create_ticket(user.user_id, user.event_id, user.metadata)
         payload = {
+            "user_id": user.user_id,
             "event_id": user.event_id,
-            "ticket_id": user.ticket_id,
-            "payment_id": user.payment_id,
-            "valid_until": user.valid_until.isoformat(),
+            "ticket_id": ticket_id,
             "metadata": user.metadata,
         }
-
-        img = qrcode.make(utils.Encode.jwt_encode(payload, config.SECRET_KEY))
-
-        cursor.child(str(user.ticket_id)).set(payload)
+        img = qrcode.make(jwt.encode(payload, config.JWT_MASTER_PASSWORD, algorithm="HS256"))
 
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
         return StreamingResponse(buffer, media_type="image/png")
+    
+    except Exception as e:
+        return JSONResponse(
+            content={"error": True, "message": f"An unexpected error occured: {str(e)}"}
+            media_type="application/json",
+            status_code=500,
+        )
 
 
-@app.get("/verify/{ticket_id}")
-def verify_ticket(
-    ticket_id: str,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-):
 
-    jwt_token = credentials.credentials
-    payload = jwt.decode(jwt_token, config.SECRET_KEY, algorithms=["HS256"])
+# @app.get("/verify/{ticket_id}")
+# def verify_ticket(
+#     ticket_id: str,
+#     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+# ):
 
-    data = cursor.child(ticket_id).get()
+#     jwt_token = credentials.credentials
+#     payload = jwt.decode(jwt_token, config.SECRET_KEY, algorithms=["HS256"])
 
-    if data != payload:
-        return {
-            "error": True,
-            "message": "Invalid Ticket",
-            "code": "INVALID_TICKET",
-            "timestamp": datetime.now().isoformat(),
-        }
+#     data = cursor.child(ticket_id).get()
 
-    if data is None:
-        return {
-            "error": True,
-            "message": "Invalid Ticket",
-            "code": "INVALID_TICKET",
-            "timestamp": datetime.now().isoformat(),
-        }
+#     if data != payload:
+#         return {
+#             "error": True,
+#             "message": "Invalid Ticket",
+#             "code": "INVALID_TICKET",
+#             "timestamp": datetime.now().isoformat(),
+#         }
 
-    if datetime.fromisoformat(data.get("valid_until")).astimezone(
-        timezone.utc
-    ) < datetime.now(timezone.utc):
-        return {
-            "error": True,
-            "message": "Ticket Expired",
-            "code": "TICKET_EXPIRED",
-            "timestamp": datetime.now().isoformat(),
-        }
-    else:
-        return {
-            "status": 200,
-            "message": "Verified",
-            "code": "TICKET_VALIDATED",
-            "timestamp": datetime.now().isoformat(),
-        }
+#     if data is None:
+#         return {
+#             "error": True,
+#             "message": "Invalid Ticket",
+#             "code": "INVALID_TICKET",
+#             "timestamp": datetime.now().isoformat(),
+#         }
+
+#     if datetime.fromisoformat(data.get("valid_until")).astimezone(
+#         timezone.utc
+#     ) < datetime.now(timezone.utc):
+#         return {
+#             "error": True,
+#             "message": "Ticket Expired",
+#             "code": "TICKET_EXPIRED",
+#             "timestamp": datetime.now().isoformat(),
+#         }
+#     else:
+#         return {
+#             "status": 200,
+#             "message": "Verified",
+#             "code": "TICKET_VALIDATED",
+#             "timestamp": datetime.now().isoformat(),
+#         }
