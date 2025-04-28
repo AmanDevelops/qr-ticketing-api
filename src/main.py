@@ -1,17 +1,16 @@
 import io
-import json
 from datetime import datetime, timezone
-from typing import Annotated
 
 import jwt
 import qrcode
 from fastapi import Depends, FastAPI, Response
-from fastapi.responses import StreamingResponse, JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 
-import utils, config
+import config
 import database
+import utils
 
 app = FastAPI()
 security = HTTPBearer()
@@ -22,12 +21,12 @@ class TicketDetails(BaseModel):
     event_id: int
     metadata: dict
 
+
 class EventDetails(BaseModel):
     name: str
     event_time: datetime
     location: str
     ticket_capacity: int
-
 
 
 @app.post("/events/create", response_class=Response)
@@ -53,22 +52,32 @@ def create_event(event_detail: EventDetails):
         )
     except database.DatabaseConnectionError as db_err:
         return JSONResponse(
-            content={"error": True, "message": f"Database connection error: {str(db_err)}"},
+            content={
+                "error": True,
+                "message": f"Database connection error: {str(db_err)}",
+            },
             media_type="application/json",
             status_code=500,
         )
     except database.DatabaseTimeoutError as timeout_err:
         return JSONResponse(
-            content={"error": True, "message": f"Database timeout error: {str(timeout_err)}"},
+            content={
+                "error": True,
+                "message": f"Database timeout error: {str(timeout_err)}",
+            },
             media_type="application/json",
             status_code=500,
         )
     except Exception as e:
         return JSONResponse(
-            content={"error": True, "message": f"An unexpected error occurred: {str(e)}"},
+            content={
+                "error": True,
+                "message": f"An unexpected error occurred: {str(e)}",
+            },
             media_type="application/json",
             status_code=500,
         )
+
 
 @app.post("/tickets/create", response_class=Response)
 def create_qr(user: TicketDetails):
@@ -81,62 +90,63 @@ def create_qr(user: TicketDetails):
             "ticket_id": ticket_id,
             "metadata": user.metadata,
         }
-        img = qrcode.make(jwt.encode(payload, config.JWT_MASTER_PASSWORD, algorithm="HS256"))
+        img = qrcode.make(
+            jwt.encode(payload, config.JWT_MASTER_PASSWORD, algorithm="HS256")
+        )
 
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
         return StreamingResponse(buffer, media_type="image/png")
-    
+
     except Exception as e:
         return JSONResponse(
-            content={"error": True, "message": f"An unexpected error occured: {str(e)}"},
+            content={
+                "error": True,
+                "message": f"An unexpected error occured: {str(e)}",
+            },
             media_type="application/json",
             status_code=500,
         )
 
 
+@app.get("/verify/{ticket_id}")
+def verify_ticket(ticket_id: str):
+    data = utils.fetch_ticket_details(ticket_id=ticket_id)
 
-# @app.get("/verify/{ticket_id}")
-# def verify_ticket(
-#     ticket_id: str,
-#     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-# ):
+    if data is None:
+        return {
+            "error": True,
+            "message": "Invalid Ticket",
+            "code": "INVALID_TICKET",
+            "timestamp": datetime.now().isoformat(),
+        }
 
-#     jwt_token = credentials.credentials
-#     payload = jwt.decode(jwt_token, config.SECRET_KEY, algorithms=["HS256"])
+    if data[3] < datetime.now(timezone.utc):
+        return {
+            "error": True,
+            "message": "Ticket Expired",
+            "code": "TICKET_EXPIRED",
+            "timestamp": datetime.now().isoformat(),
+        }
 
-#     data = cursor.child(ticket_id).get()
-
-#     if data != payload:
-#         return {
-#             "error": True,
-#             "message": "Invalid Ticket",
-#             "code": "INVALID_TICKET",
-#             "timestamp": datetime.now().isoformat(),
-#         }
-
-#     if data is None:
-#         return {
-#             "error": True,
-#             "message": "Invalid Ticket",
-#             "code": "INVALID_TICKET",
-#             "timestamp": datetime.now().isoformat(),
-#         }
-
-#     if datetime.fromisoformat(data.get("valid_until")).astimezone(
-#         timezone.utc
-#     ) < datetime.now(timezone.utc):
-#         return {
-#             "error": True,
-#             "message": "Ticket Expired",
-#             "code": "TICKET_EXPIRED",
-#             "timestamp": datetime.now().isoformat(),
-#         }
-#     else:
-#         return {
-#             "status": 200,
-#             "message": "Verified",
-#             "code": "TICKET_VALIDATED",
-#             "timestamp": datetime.now().isoformat(),
-#         }
+    if not data[1]:
+        return {
+            "error": True,
+            "message": "User Disabled",
+            "code": "USER_DISABLED",
+            "timestamp": datetime.now().isoformat(),
+        }
+    if data[4] == 1:
+        return {
+            "status": 200,
+            "message": "Verified",
+            "code": "TICKET_VALIDATED",
+            "metadata": {
+                "first_name": data[0],
+                "isActive": data[1],
+                "event_name": data[2],
+                "event_time": data[3],
+            },
+            "timestamp": datetime.now().isoformat(),
+        }
