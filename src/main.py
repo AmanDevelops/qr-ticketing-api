@@ -90,7 +90,7 @@ def create_qr(user: TicketDetails):
     
     except Exception as e:
         return JSONResponse(
-            content={"error": True, "message": f"An unexpected error occured: {str(e)}"}
+            content={"error": True, "message": f"An unexpected error occured: {str(e)}"},
             media_type="application/json",
             status_code=500,
         )
