@@ -97,7 +97,7 @@ def create_qr(user: TicketDetails):
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
-        return StreamingResponse(buffer, media_type="image/png")
+        return StreamingResponse(buffer, media_type="image/png", status_code=200)
 
     except Exception as e:
         return JSONResponse(
@@ -143,6 +143,7 @@ def verify_ticket(ticket_id: str):
             "message": "Verified",
             "code": "TICKET_VALIDATED",
             "metadata": {
+                "ticket_id": ticket_id,
                 "first_name": data[0],
                 "isActive": data[1],
                 "event_name": data[2],
