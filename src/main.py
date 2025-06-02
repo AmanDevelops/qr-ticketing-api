@@ -8,9 +8,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 
-import config
-import database
-import utils
+from . import config, database, models, utils
 
 app = FastAPI()
 security = HTTPBearer()
@@ -27,6 +25,11 @@ class EventDetails(BaseModel):
     event_time: datetime
     location: str
     ticket_capacity: int
+
+
+class UserModel(BaseModel):
+    first_name: str
+    username: str
 
 
 @app.post("/events/create", response_class=Response)
@@ -50,7 +53,7 @@ def create_event(event_detail: EventDetails):
             media_type="application/json",
             status_code=200,
         )
-    except database.DatabaseConnectionError as db_err:
+    except ConnectionError as db_err:
         return JSONResponse(
             content={
                 "error": True,
@@ -59,7 +62,7 @@ def create_event(event_detail: EventDetails):
             media_type="application/json",
             status_code=500,
         )
-    except database.DatabaseTimeoutError as timeout_err:
+    except TimeoutError as timeout_err:
         return JSONResponse(
             content={
                 "error": True,
@@ -114,6 +117,8 @@ def create_qr(user: TicketDetails):
 def verify_ticket(ticket_id: str):
     data = utils.fetch_ticket_details(ticket_id=ticket_id)
 
+    print(data)
+
     if data is None:
         return {
             "error": True,
@@ -122,7 +127,10 @@ def verify_ticket(ticket_id: str):
             "timestamp": datetime.now().isoformat(),
         }
 
-    if data[3] < datetime.now(timezone.utc):
+    event_time = data[3]
+
+
+    if event_time.astimezone(timezone.utc) < datetime.now(timezone.utc):
         return {
             "error": True,
             "message": "Ticket Expired",
@@ -151,3 +159,24 @@ def verify_ticket(ticket_id: str):
             },
             "timestamp": datetime.now().isoformat(),
         }
+
+
+@app.post("/users/create", response_class=Response)
+def create_user(user: UserModel):
+    try:
+        user_id = utils.create_user(user.first_name, user.username)
+        return JSONResponse(
+            content={"success": True, "user_id": user_id},
+            media_type="application/json",
+            status_code=500,
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "error": True,
+                "message": f"An unexpected error occured: {str(e)}",
+            },
+            media_type="application/json",
+            status_code=500,
+        )
