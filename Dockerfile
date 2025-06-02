@@ -9,7 +9,9 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y gcc libpq-dev
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libpq-dev postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy dependencies
 COPY requirements.txt .
@@ -23,5 +25,9 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Run the FastAPI app with Uvicorn
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+CMD ["./entrypoint.sh"]
